@@ -230,3 +230,11 @@ pytest tests/integration/test_llm_step.py::test_agent_picks_search_input_for_sea
 Учитывайте это при формулировке задач: если какой-то шаг должен требовать
 подтверждения (например, финальное подтверждение оплаты), укажите это явно
 в тексте задачи.
+
+## Автор
+
+[efrom-K](https://github.com/efrom-K) - [Browser_Agent](https://github.com/efrom-K/Browser_Agent)
+
+## Лицензия
+
+[MIT](LICENSE)
