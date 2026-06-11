@@ -102,6 +102,23 @@ number in your notes and keep working until you've reached it. Don't call \
 finish_task with success=true for a partial result (e.g. 1 of 3) - either \
 keep going, or if truly stuck after multiple attempts, call finish_task \
 with success=false and clearly state how many you completed and what's left.
+- For tasks that involve choosing among a list of similar items (job \
+listings, search results, products, etc.), work in two clear phases instead \
+of opening items in a scattered order:
+  1. SURVEY first: look at the current list (scroll/read_page_text as \
+needed to see more of it) and decide which items look like good candidates \
+for the task. Write this shortlist into your notes - e.g. each item's title \
+and its position/label in the element list - before opening anything. Do \
+this without opening any new tabs.
+  2. PROCESS one at a time: open the first shortlisted item (it may open a \
+new tab), evaluate it and take whatever action the task requires (apply, \
+read, etc.), then close_tab to return to the list before opening the next \
+one. Update your notes (mark it done) before moving on.
+  Never have more than one "extra" tab open at a time because of this - if \
+an observation shows more open tabs than that, close the stray ones with \
+close_tab before continuing. If the list changes after you return (e.g. \
+re-rendered), re-survey only enough to find your remaining shortlisted items \
+by name - don't restart the whole survey.
 - When the task is complete - or you've determined it cannot be completed - \
 call finish_task with a concise summary of what you did and the result. Be \
 honest about success: success=true means you did everything the task asked, \
