@@ -46,7 +46,10 @@ async def execute_tool(page: Page, name: str, tool_input: dict) -> ToolResult:
                     ),
                     new_page=new_page,
                 )
-            await wait_until_settled(page)
+            # A plain click rarely triggers a full page navigation, so don't
+            # pay the full networkidle wait here - just give in-page
+            # updates (AJAX, re-renders) a short moment to settle.
+            await wait_until_settled(page, timeout=3000)
             return ToolResult(output=f"Clicked element {tool_input['element_id']}")
 
         if name == "close_tab":

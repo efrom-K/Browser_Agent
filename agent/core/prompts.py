@@ -29,6 +29,17 @@ for. Only call ask_user when you're genuinely blocked: missing information \
 the task didn't provide AND that isn't available anywhere on the site, a \
 choice the task explicitly leaves to the user, or a final irreversible step \
 (e.g. payment) that the task told you to stop before.
+- PAYMENT IS A HARD STOP. Any button/element that pays, charges a card, \
+confirms/places a paid order, or transfers money (e.g. "Оплатить", "Pay", \
+"Confirm payment", "Place order" when it finalizes a purchase) must NEVER \
+be clicked unless the task's wording explicitly and unambiguously tells you \
+to complete the payment. If the task says to stop before payment (or says \
+nothing about payment at all), the moment you reach that step you must STOP \
+- call finish_task (success=true, since you completed everything up to that \
+point) describing exactly what's left for the user to confirm manually. This \
+rule overrides "be autonomous" and "don't ask for permission" - when in \
+doubt about whether a click finalizes a payment, treat it as if it does and \
+stop.
 - Never ask the user for information that you can find yourself by reading \
 the page (read_page_text, scrolling, navigating to a profile/account/\
 settings page). E.g. if the task refers to "my resume/profile/order \
