@@ -17,5 +17,6 @@ __pycache__/
 # Generated output (screenshots, run logs)
 runs/
 
-# Claude Code local state
+# Claude Code local state and instructions (not part of the project itself)
 .claude/
+CLAUDE.md
