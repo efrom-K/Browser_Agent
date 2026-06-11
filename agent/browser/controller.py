@@ -38,12 +38,7 @@ class BrowserController:
     async def goto(self, url: str) -> None:
         assert self.page is not None, "call start() first"
         await self.page.goto(url, wait_until="domcontentloaded")
-        try:
-            await self.page.wait_for_load_state("networkidle", timeout=5000)
-        except Exception:
-            # Pages with long-polling/streaming connections never reach
-            # networkidle; domcontentloaded is good enough to proceed.
-            pass
+        await wait_until_settled(self.page)
 
     async def close(self) -> None:
         if self.context:
@@ -59,3 +54,18 @@ class BrowserController:
 
     async def __aexit__(self, *exc_info) -> None:
         await self.close()
+
+
+async def wait_until_settled(page: Page, timeout: int = 15000) -> None:
+    """Give a page time to finish loading dynamic content after navigation.
+
+    Many real sites (hh.ru, webmail, etc.) keep fetching/rendering content
+    well after domcontentloaded; waiting for networkidle (with a generous
+    timeout) avoids the agent perceiving a half-loaded page and giving up
+    too early. Pages with long-polling/streaming connections never reach
+    networkidle, so this is best-effort and falls through on timeout.
+    """
+    try:
+        await page.wait_for_load_state("networkidle", timeout=timeout)
+    except Exception:
+        pass

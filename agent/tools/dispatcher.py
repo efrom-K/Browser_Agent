@@ -8,6 +8,7 @@ from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Page
 
 from ..browser import actions
+from ..browser.controller import wait_until_settled
 from ..browser.exceptions import ElementNotFoundError
 
 
@@ -24,6 +25,7 @@ async def execute_tool(page: Page, name: str, tool_input: dict) -> ToolResult:
     try:
         if name == "navigate":
             await page.goto(tool_input["url"], wait_until="domcontentloaded")
+            await wait_until_settled(page)
             return ToolResult(output=f"Navigated to {page.url}")
 
         if name == "click":
@@ -35,6 +37,7 @@ async def execute_tool(page: Page, name: str, tool_input: dict) -> ToolResult:
             if new_pages:
                 new_page = new_pages[-1]
                 await new_page.wait_for_load_state("domcontentloaded")
+                await wait_until_settled(new_page)
                 return ToolResult(
                     output=(
                         f"Clicked element {tool_input['element_id']}. This opened a "
@@ -43,6 +46,7 @@ async def execute_tool(page: Page, name: str, tool_input: dict) -> ToolResult:
                     ),
                     new_page=new_page,
                 )
+            await wait_until_settled(page)
             return ToolResult(output=f"Clicked element {tool_input['element_id']}")
 
         if name == "close_tab":
@@ -103,6 +107,7 @@ async def execute_tool(page: Page, name: str, tool_input: dict) -> ToolResult:
 
         if name == "go_back":
             await page.go_back(wait_until="domcontentloaded")
+            await wait_until_settled(page)
             return ToolResult(output=f"Went back to {page.url}")
 
         if name == "ask_user":
