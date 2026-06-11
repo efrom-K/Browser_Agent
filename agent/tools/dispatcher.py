@@ -21,7 +21,9 @@ class ToolResult:
     new_page: Page | None = None
 
 
-async def execute_tool(page: Page, name: str, tool_input: dict) -> ToolResult:
+async def execute_tool(
+    page: Page, name: str, tool_input: dict, preferred_page: Page | None = None
+) -> ToolResult:
     try:
         if name == "navigate":
             await page.goto(tool_input["url"], wait_until="domcontentloaded")
@@ -34,6 +36,13 @@ async def execute_tool(page: Page, name: str, tool_input: dict) -> ToolResult:
             await actions.click(page, tool_input["element_id"])
             await page.wait_for_timeout(300)
             new_pages = [p for p in context.pages if p not in pages_before]
+            if not new_pages:
+                # Some sites open the new tab with a short delay, and a
+                # plain click can also trigger in-page updates (AJAX,
+                # re-renders) - this single wait covers both cases without
+                # waiting twice.
+                await wait_until_settled(page, timeout=3000)
+                new_pages = [p for p in context.pages if p not in pages_before]
             if new_pages:
                 new_page = new_pages[-1]
                 await new_page.wait_for_load_state("domcontentloaded")
@@ -46,10 +55,6 @@ async def execute_tool(page: Page, name: str, tool_input: dict) -> ToolResult:
                     ),
                     new_page=new_page,
                 )
-            # A plain click rarely triggers a full page navigation, so don't
-            # pay the full networkidle wait here - just give in-page
-            # updates (AJAX, re-renders) a short moment to settle.
-            await wait_until_settled(page, timeout=3000)
             return ToolResult(output=f"Clicked element {tool_input['element_id']}")
 
         if name == "close_tab":
@@ -57,8 +62,14 @@ async def execute_tool(page: Page, name: str, tool_input: dict) -> ToolResult:
             if len(context.pages) <= 1:
                 return ToolResult(output="Error: cannot close the only open tab.")
             other_pages = [p for p in context.pages if p != page]
+            # Prefer the tab we came from (tracked by the caller), so a
+            # chain of "click vacancy -> new tab -> close_tab" returns to
+            # the search results even if other background tabs are open.
+            if preferred_page is not None and preferred_page in other_pages:
+                new_page = preferred_page
+            else:
+                new_page = other_pages[-1]
             await page.close()
-            new_page = other_pages[-1]
             await new_page.bring_to_front()
             return ToolResult(
                 output=f"Closed tab. Now viewing {new_page.url} ({len(context.pages)} tabs open)",

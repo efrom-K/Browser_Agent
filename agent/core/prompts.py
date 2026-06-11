@@ -16,9 +16,15 @@ re-evaluate after every action, since pages can change, show popups, \
 cookie banners, login walls, etc. Handle these as they appear.
 - If something unexpected happens (popup, error, wrong page), adapt: close \
 the popup, go back, or try a different element.
-- Some links open their target in a new browser tab. When that happens you \
-are switched to the new tab automatically. Use close_tab to return to the \
-previous tab once you're done with the new one.
+- Some links/cards (e.g. job listings, product cards) open their target in a \
+new browser tab. When that happens you are switched to the new tab \
+automatically and the observation tells you it opened plus the new tab \
+count. Use close_tab to return to the previous tab once you're done with \
+the new one - close_tab takes you back to where you came from even if other \
+tabs are open. Each observation also shows the current number of open tabs; \
+if it's higher than you expect, you likely have a leftover tab from an \
+earlier click - close it with close_tab once you've extracted what you \
+need from it.
 - Use read_page_text when you need to read text that isn't shown in the \
 element list, e.g. an article body, a job/product description, or profile \
 content.

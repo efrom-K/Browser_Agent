@@ -87,6 +87,9 @@ class AgentLoop:
         self.system_prompt = build_system_prompt(vision=self.vision)
         self.messages: list[dict] = []
         self.notes = ""
+        # Tabs we've navigated away from via an auto-followed click, most
+        # recent last - close_tab returns to the top of this stack.
+        self._tab_stack: list[Page] = []
 
     def _current_system_prompt(self) -> str:
         if not self.notes:
@@ -96,7 +99,12 @@ class AgentLoop:
     async def run(self, task: str, on_step: OnStepFn | None = None) -> AgentResult:
         state = await capture_state(self.page, mark_screenshot=self.vision)
         self.messages.append(
-            {"role": "user", "content": build_observation(state, task, include_screenshot=self.vision)}
+            {
+                "role": "user",
+                "content": build_observation(
+                    state, task, include_screenshot=self.vision, tab_count=len(self.page.context.pages)
+                ),
+            }
         )
 
         for step in range(1, self.max_steps + 1):
@@ -130,6 +138,13 @@ class AgentLoop:
             if tool_use.name == "update_notes":
                 self.notes = tool_use.input.get("notes", "")
                 result = ToolResult(output="Notes updated.")
+            elif tool_use.name == "close_tab":
+                preferred_page = self._tab_stack[-1] if self._tab_stack else None
+                result = await execute_tool(
+                    self.page, tool_use.name, tool_use.input, preferred_page=preferred_page
+                )
+                if result.new_page is not None and self._tab_stack:
+                    self._tab_stack.pop()
             else:
                 result = await execute_tool(self.page, tool_use.name, tool_use.input)
 
@@ -167,12 +182,16 @@ class AgentLoop:
                 return AgentResult(success=bool(result.success), summary=result.output, steps=step)
 
             if result.new_page is not None:
+                if tool_use.name == "click":
+                    self._tab_stack.append(self.page)
                 self.page = result.new_page
 
             new_state = await capture_state(self.page, mark_screenshot=self.vision)
             tool_result_content = [
                 {"type": "text", "text": result.output}
-            ] + build_observation_content(new_state, include_screenshot=self.vision)
+            ] + build_observation_content(
+                new_state, include_screenshot=self.vision, tab_count=len(self.page.context.pages)
+            )
             self.messages.append(
                 {
                     "role": "user",
