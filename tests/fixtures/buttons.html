@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Buttons</title>
+</head>
+<body>
+  <button id="counter">Count: 0</button>
+  <button id="hidden-toggle">Toggle hidden</button>
+  <div id="hidden-box" style="display: none">I was hidden</div>
+  <button id="disabled-btn" disabled>Disabled</button>
+
+  <script>
+    let count = 0;
+    document.getElementById("counter").addEventListener("click", () => {
+      count++;
+      document.getElementById("counter").textContent = "Count: " + count;
+    });
+
+    document.getElementById("hidden-toggle").addEventListener("click", () => {
+      const box = document.getElementById("hidden-box");
+      box.style.display = box.style.display === "none" ? "block" : "none";
+    });
+  </script>
+</body>
+</html>

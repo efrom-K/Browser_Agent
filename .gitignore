@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Secrets - never commit real API keys, only .env.example
+.env
+.env.*
+!.env.example
+
+# Browser profiles (cookies/session data for logged-in test accounts)
+.agent_profile/
+.hh_profile/
+*_profile/
+
+# Generated output (screenshots, run logs)
+runs/
+
+# Claude Code local state
+.claude/
