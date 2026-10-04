@@ -18,6 +18,20 @@ def _page_description(state: PageState, tab_count: int | None = None) -> str:
             )
         else:
             lines.append("Open browser tabs: 1 (this one).")
+    if state.captcha:
+        lines.append(
+            "WARNING: this page shows a CAPTCHA / bot check. Do not try to solve or "
+            "click it - call ask_user asking the user to solve it in the browser window, "
+            "then continue the task."
+        )
+    if state.list_items >= 5:
+        lines.append(
+            f"This page contains a list of {state.list_items} similar items (e.g. search "
+            "results/listings/products), most of them off-screen - use read_list to read "
+            "them all compactly."
+        )
+    if state.next_href:
+        lines.append(f"Next results page (link not clickable on this layout): {state.next_href} - open it with navigate.")
     lines += [
         "Visible interactive elements:",
         elements_text,

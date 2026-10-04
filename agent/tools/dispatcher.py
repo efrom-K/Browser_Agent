@@ -2,14 +2,47 @@
 
 from __future__ import annotations
 
+import asyncio
+import re
+import time
 from dataclasses import dataclass
 
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Page
 
+from .. import config
 from ..browser import actions
 from ..browser.controller import wait_until_settled
 from ..browser.exceptions import ElementNotFoundError
+from ..browser.perception import _JS_SOURCE
+
+_READ_CHUNK = 4000
+_LIST_CHUNK = 25
+
+
+# Page-changing actions (they can load pages) are spaced out on real sites:
+# bursts of page loads are what trips anti-bot rate limits like Avito's.
+_PAGE_ACTIONS = {"navigate", "click", "go_back", "press_key"}
+_last_page_action = 0.0
+
+
+async def _pace(page: Page, url: str) -> None:
+    global _last_page_action
+    if url.startswith("http"):
+        wait = _last_page_action + config.MIN_ACTION_INTERVAL - time.monotonic()
+        if wait > 0:
+            await asyncio.sleep(wait)
+        _last_page_action = time.monotonic()
+
+
+def _same_page(a: str, b: str) -> bool:
+    return a.split("#")[0].rstrip("/") == b.split("#")[0].rstrip("/")
+
+
+async def _list_items(page: Page) -> list[str]:
+    if not await page.evaluate("typeof window.__agentReadList === 'function'"):
+        await page.evaluate(_JS_SOURCE)
+    return await page.evaluate("window.__agentReadList()")
 
 
 @dataclass
@@ -25,7 +58,14 @@ async def execute_tool(
     page: Page, name: str, tool_input: dict, preferred_page: Page | None = None
 ) -> ToolResult:
     try:
+        if name in _PAGE_ACTIONS or (name == "type_text" and tool_input.get("submit")):
+            await _pace(page, tool_input.get("url") or page.url)
+
         if name == "navigate":
+            if _same_page(tool_input["url"], page.url):
+                # Re-loading the current page only costs a request; small
+                # models do it when unsure what to do next.
+                return ToolResult(output=f"Already on {page.url} - nothing reloaded.")
             await page.goto(tool_input["url"], wait_until="domcontentloaded")
             await wait_until_settled(page)
             return ToolResult(output=f"Navigated to {page.url}")
@@ -76,6 +116,34 @@ async def execute_tool(
                 new_page=new_page,
             )
 
+        if name == "read_list":
+            items = await _list_items(page)
+            if not items:
+                return ToolResult(output="No repeated list of items found on this page - use read_page_text.")
+            # Same auto-continue as read_page_text, counted in items.
+            last_key, last_end = getattr(page, "_agent_list", (None, 0))
+            if last_key == page.url and last_end >= len(items):
+                page._agent_list = (page.url, 0)  # a further call starts over
+                return ToolResult(
+                    output=f"You have already read all {len(items)} items of this list. Choose "
+                    "from them now (they are in your notes / the read_list results above), "
+                    "or open the next results page for more."
+                )
+            start = last_end if last_key == page.url else 0
+            end = min(start + _LIST_CHUNK, len(items))
+            page._agent_list = (page.url, end)
+            lines = [f"List of {len(items)} items on this page (items #{start + 1}-#{end}):"]
+            lines += [f"#{i} {item}" for i, item in enumerate(items[start:end], start + 1)]
+            if end < len(items):
+                lines.append(f"(call read_list again for items #{end + 1}-#{min(end + _LIST_CHUNK, len(items))})")
+            else:
+                lines.append("(end of list on this page - for more items go to the next results page)")
+            lines.append(
+                "Note: this is dropped from your context after a few steps - choose the items "
+                "you want now with pick_items (by number)."
+            )
+            return ToolResult(output="\n".join(lines))
+
         if name == "read_page_text":
             element_id = tool_input.get("element_id")
             if element_id is not None:
@@ -89,11 +157,37 @@ async def execute_tool(
                     raise ElementNotFoundError(element_id)
             else:
                 text = await page.evaluate("document.body.innerText")
-            text = text.strip()
-            max_chars = 4000
-            if len(text) > max_chars:
-                text = text[:max_chars] + "\n... (truncated)"
-            return ToolResult(output=text or "(empty)")
+            text = re.sub(r"\s*\n\s*", "\n", re.sub(r"[ \t\xa0]+", " ", text)).strip()
+            # Calling again without an offset continues where the last read of
+            # the same page/element stopped - small models just re-call it
+            # expecting "more" rather than passing offsets.
+            key = (page.url, element_id)
+            start = tool_input.get("offset")
+            if start is None:
+                last_key, last_end = getattr(page, "_agent_read", (None, 0))
+                start = last_end if last_key == key and last_end < len(text) else 0
+            end = start + _READ_CHUNK
+            page._agent_read = (key, end)
+            chunk = text[start:end]
+            if end < len(text):
+                chunk += (
+                    f"\n... (chars {start}-{end} of {len(text)}; call read_page_text "
+                    "again to continue reading)"
+                )
+            elif start > 0:
+                chunk += "\n(end of page text)"
+            elif text:
+                chunk += "\n(this is the complete text of the page as currently loaded)"
+            if end < len(text) and element_id is None:
+                n = len(await _list_items(page))
+                if n:
+                    chunk += f"\nTip: this page has a list of {n} items - read_list shows them compactly."
+            if len(chunk) > 1000:
+                chunk += (
+                    "\nNote: this text is dropped from your context after a few steps - "
+                    "save anything you need (e.g. candidates and their key facts) with update_notes."
+                )
+            return ToolResult(output=chunk or "(empty)")
 
         if name == "type_text":
             await actions.type_text(
@@ -140,8 +234,15 @@ async def execute_tool(
         return ToolResult(output=f"Unknown tool: {name}")
 
     except ElementNotFoundError as exc:
+        # Small models reuse IDs from an older page; tell them the valid range.
+        try:
+            count = await page.evaluate("(window.__agentElements || []).length")
+        except PlaywrightError:
+            count = 0
+        valid = f"the current element list only has IDs 0-{count - 1}" if count else "the page has no elements now"
         return ToolResult(
-            output=f"Error: {exc}. The page may have changed - re-check the latest screenshot."
+            output=f"Error: {exc} - {valid}. IDs from earlier pages are no longer valid; "
+            "pick an ID from the latest element list."
         )
 
     except PlaywrightError as exc:

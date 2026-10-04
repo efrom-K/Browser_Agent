@@ -14,6 +14,10 @@ from __future__ import annotations
 from .. import config
 
 _OMITTED_TEXT = "[older page observation omitted to save context]"
+# Old tool outputs (mostly read_page_text dumps) are cut to this many chars;
+# anything the agent needs later should already be in its notes.
+_MAX_OLD_RESULT = 300
+_TRUNCATED_RESULT = " ...[older tool output truncated - keep needed facts in your notes]"
 
 
 def trim_history(messages: list[dict], keep_last: int | None = None) -> list[dict]:
@@ -50,6 +54,9 @@ def _is_observation(message: dict) -> bool:
 def _trim_observation(message: dict) -> dict:
     tool_result = message["content"][0]
     action_result = tool_result["content"][0]
+    text = action_result.get("text", "")
+    if len(text) > _MAX_OLD_RESULT:
+        action_result = {**action_result, "text": text[:_MAX_OLD_RESULT] + _TRUNCATED_RESULT}
     new_tool_result = {
         **tool_result,
         "content": [action_result, {"type": "text", "text": _OMITTED_TEXT}],

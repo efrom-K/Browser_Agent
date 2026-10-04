@@ -114,9 +114,11 @@ async def test_loop_update_notes_persists_across_steps(controller):
     counter_text = await controller.page.text_content("#counter")
     assert counter_text == "Count: 1"
 
-    # Subsequent calls to the LLM include the notes in the system prompt.
-    assert "Plan: click counter once, then finish." in client.systems[1]
-    assert "Plan: click counter once, then finish." in client.systems[2]
+    # Subsequent calls to the LLM carry the notes in their newest message
+    # (not the system prompt, which stays fixed for prompt caching).
+    for call in client.calls[1:]:
+        assert "Plan: click counter once, then finish." in str(call[-1]["content"])
+    assert all(s == client.systems[0] for s in client.systems)
 
     # update_notes still produced a tool_result/observation for the next turn.
     second_call_messages = client.calls[1]
@@ -184,3 +186,78 @@ async def test_loop_reaches_max_steps(controller):
     assert result.success is False
     assert result.steps == 3
     assert "maximum number of steps" in result.summary
+
+
+async def test_loop_warns_on_repeated_identical_call(controller):
+    await controller.goto(fixture_url("buttons.html"))
+    url = fixture_url("buttons.html")
+
+    client = FakeLLMClient(
+        responses=[[_tool_use(f"t{i}", "navigate", {"url": url})] for i in range(3)]
+        + [[_tool_use("t9", "finish_task", {"summary": "Done.", "success": True})]]
+    )
+
+    loop = AgentLoop(controller.page, client=client, max_steps=5, vision=False)
+    events = []
+    await loop.run("Open the page.", on_step=events.append)
+
+    assert "WARNING" not in events[1].tool_output
+    assert "3 times in a row" in events[2].tool_output
+
+
+async def test_loop_refuses_guessed_url(controller):
+    await controller.goto(fixture_url("buttons.html"))
+
+    client = FakeLLMClient(
+        responses=[
+            [_tool_use("t1", "navigate", {"url": fixture_url("article.html")})],
+            [_tool_use("t2", "finish_task", {"summary": "Done.", "success": True})],
+        ]
+    )
+
+    loop = AgentLoop(controller.page, client=client, max_steps=5, vision=False)
+    events = []
+    await loop.run("Read the page.", on_step=events.append)
+
+    assert events[0].tool_output.startswith("Navigation refused")
+    assert controller.page.url == fixture_url("buttons.html")
+
+
+async def test_loop_sends_back_finish_with_unseen_link(controller):
+    await controller.goto(fixture_url("buttons.html"))
+
+    client = FakeLLMClient(
+        responses=[
+            [_tool_use("t1", "finish_task", {"summary": "Best: /shop/item_123", "success": True})],
+            [_tool_use("t2", "finish_task", {"summary": "Best: /shop/item_123", "success": True})],
+        ]
+    )
+
+    loop = AgentLoop(controller.page, client=client, max_steps=5, vision=False)
+    events = []
+    result = await loop.run("Find the best item.", on_step=events.append)
+
+    assert events[0].tool_output.startswith("Not finished yet") and "/shop/item_123" in events[0].tool_output
+    assert result.success is True and result.steps == 2  # sent back only once
+
+
+async def test_loop_pick_items_appends_exact_items_to_summary(controller):
+    cards = "".join(
+        f'<div class="card"><p><a href="/item/{i}">Phone {i}</a></p><p>{1000 + i} ₽</p><p>Good condition</p></div>' for i in range(6)
+    )
+    await controller.page.set_content(f'<div class="list">{cards}</div>')
+
+    client = FakeLLMClient(
+        responses=[
+            [_tool_use("t1", "pick_items", {"item_numbers": [2, 5]})],
+            [_tool_use("t2", "finish_task", {"summary": "Cheapest-looking ones.", "success": True})],
+        ]
+    )
+
+    loop = AgentLoop(controller.page, client=client, max_steps=5, vision=False)
+    result = await loop.run("Pick 2 phones.")
+
+    assert result.summary.startswith("Cheapest-looking ones.")
+    assert "1. Phone 1 | 1001 ₽ -> /item/1" in result.summary and result.summary.count("/item/") == 2
+    assert "Phone 4 | 1004 ₽" in result.summary
+    assert "Picked items so far (2)" in str(client.calls[1][-1]["content"])

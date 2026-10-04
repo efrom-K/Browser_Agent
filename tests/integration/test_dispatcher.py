@@ -65,3 +65,45 @@ async def test_close_tab_with_only_one_tab_open(controller):
     result = await execute_tool(controller.page, "close_tab", {})
 
     assert result.output.startswith("Error:")
+
+
+async def test_read_page_text_continues_on_repeat(controller):
+    words = " ".join(f"w{i}" for i in range(2000))  # ~10k chars -> 3 chunks
+    await controller.page.set_content(f"<p>{words}</p>")
+    page = controller.page
+
+    first = (await execute_tool(page, "read_page_text", {})).output
+    second = (await execute_tool(page, "read_page_text", {})).output
+    third = (await execute_tool(page, "read_page_text", {})).output
+    again = (await execute_tool(page, "read_page_text", {})).output
+
+    assert first.startswith("w0 ") and "call read_page_text again" in first
+    assert not second.startswith("w0 ") and "chars 4000-8000" in second
+    assert "(end of page text)" in third
+    assert again.startswith("w0 ")  # after the end, starts over
+
+
+async def test_read_list_returns_compact_items(controller):
+    cards = "".join(
+        f'<div class="card"><p><a href="/item/{i}?ref=x">Phone {i}</a></p><p>{1000 + i} ₽</p>'
+        f'<p><button>Write</button></p></div>'
+        for i in range(30)
+    )
+    await controller.page.set_content(f'<div class="list">{cards}</div><a href="/about">About us page</a>')
+
+    first = (await execute_tool(controller.page, "read_list", {})).output
+    second = (await execute_tool(controller.page, "read_list", {})).output
+
+    assert "List of 30 items" in first and "#1 Phone 0 | 1000 ₽ -> /item/0" in first
+    assert "Write" not in first and "#26 " not in first
+    assert "#26 Phone 25" in second and "end of list" in second
+
+
+async def test_navigate_to_current_page_does_not_reload(controller):
+    await controller.goto(fixture_url("buttons.html"))
+    await controller.page.evaluate("window.__marker = 1")
+
+    result = await execute_tool(controller.page, "navigate", {"url": fixture_url("buttons.html")})
+
+    assert result.output.startswith("Already on")
+    assert await controller.page.evaluate("window.__marker") == 1

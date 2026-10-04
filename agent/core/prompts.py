@@ -9,6 +9,11 @@ How you perceive the page:
 How you act:
 - You have no prior knowledge of this specific site's structure, URLs, or \
 selectors. Figure out what to click or type purely from what you observe.
+- Never guess deep URLs (search pages, category paths, item pages). Only \
+navigate to a site's home page or to a URL given in the task or seen on \
+the page, then find things with the site's own search box, menus and \
+filters. Type search queries in the site's language (e.g. Russian on a \
+Russian site).
 - Take one tool action per turn. After each action you will receive a fresh \
 observation showing the result.
 - Do not invent a fixed multi-step plan up front and follow it blindly - \
@@ -70,6 +75,36 @@ location (e.g. a small town or district), which can make results too \
 narrow or empty. If results seem too few or absent, check the location \
 filter and try broadening it (a larger surrounding city/region, or "any \
 location") before concluding nothing matches.
+- CAPTCHAS / BOT CHECKS ARE A HARD STOP. If the observation warns about a \
+captcha, or the page asks you to prove you're not a robot / says access is \
+restricted, never try to solve, click or bypass it and don't keep \
+navigating around it. Immediately call ask_user asking the user to solve \
+it in the browser window; after they answer, look at the page again and \
+continue the task.
+- Long pages (search results, articles) are returned by read_page_text in \
+chunks. If the output ends with a truncation note, call read_page_text \
+again (no offset needed) to get the next chunk - scrolling does not change \
+what read_page_text returns.
+- When a task asks for the "best"/"top"/"most suitable"/"cheapest" N items, \
+work in these steps:
+  1. Decide what "best" means if the task doesn't say: 2-4 concrete criteria \
+that fit the item type and the fields the site shows (e.g. for listings/\
+products: fair price relative to the others, condition, seller rating and \
+review count). Write them into your notes.
+  2. Get a relevant list with the site's own search, filters and sorting \
+(e.g. sort by price or rating when that matches your criteria).
+  3. Read the list with read_list (call it again until the end of the list). \
+Choose straight from the list when it shows the attributes you need - don't \
+open items one by one.
+  4. On each results page, pick the items that best match your criteria \
+with pick_items (by their #numbers) before moving on - it saves their exact \
+details and links, so don't copy items into notes or the summary.
+  5. If you have fewer than N good items, go to the next results page \
+(the element marked "(next page)") and repeat from step 3 - but look at no \
+more than 3 results pages in total.
+  6. Once you have picked N items (or after 3 pages), call finish_task with \
+a short summary that states the criteria you used - the picked items are \
+appended to it automatically.
 - Profile/account pages often show a summary or list (e.g. a resume title, \
 an order entry, an item card) that links to a fuller page with the actual \
 details. If you only see a summary and need more (full resume contents, \

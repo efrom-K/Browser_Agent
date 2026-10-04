@@ -50,5 +50,12 @@ async def scroll(page: Page, direction: str = "down", amount: int = 600) -> None
     await page.wait_for_timeout(200)
 
 
+# Playwright key names are case-sensitive ("Tab", not "tab").
+_KEY_NAMES = {k.lower(): k for k in (
+    "Enter", "Tab", "Escape", "Backspace", "Delete", "Space", "Home", "End", "PageUp", "PageDown",
+    "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+)} | {"esc": "Escape", "return": "Enter", "up": "ArrowUp", "down": "ArrowDown", "left": "ArrowLeft", "right": "ArrowRight"}
+
+
 async def press_key(page: Page, key: str) -> None:
-    await page.keyboard.press(key)
+    await page.keyboard.press(_KEY_NAMES.get(key.lower(), key))

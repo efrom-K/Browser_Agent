@@ -65,3 +65,30 @@ async def test_capture_state_survives_navigation(controller):
 
     new_state = await capture_state(controller.page)
     assert new_state.title == "Simple Form"
+
+
+async def test_captcha_flag_on_block_page_but_not_on_content_mentioning_it(controller):
+    await controller.page.set_content(
+        "<h1>Доступ ограничен: проблема с IP</h1><p>Нажмите «Продолжить» для решения капчи</p><button>Продолжить</button>"
+    )
+    assert (await capture_state(controller.page, mark_screenshot=False)).captcha
+
+    results = "".join(f"<p><a href='/r/{i}'>Repo {i}: playwright tool that is undetected by captchas</a> {'x' * 80}</p>" for i in range(30))
+    await controller.page.set_content(f"<title>Search results</title>{results}")
+    assert not (await capture_state(controller.page, mark_screenshot=False)).captcha
+
+
+async def test_offscreen_next_page_link_is_listed(controller):
+    await controller.page.set_content(
+        "<a href='/a'>Top link</a><div style='height:5000px'></div><a href='/list?p=2'>Next ›</a>"
+    )
+    state = await capture_state(controller.page, mark_screenshot=False)
+
+    lines = format_elements(state.elements).splitlines()
+    assert any("Next ›" in line and "(next page)" in line and "/list?p=2" in line for line in lines)
+
+
+async def test_captcha_flag_ignores_title_of_long_content_page(controller):
+    body = "".join(f"<p>Paragraph {i} about browser automation and testing tools.</p>" for i in range(60))
+    await controller.page.set_content(f"<title>repo: MCP server undetected by anti-bots and captchas</title>{body}")
+    assert not (await capture_state(controller.page, mark_screenshot=False)).captcha

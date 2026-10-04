@@ -99,14 +99,47 @@ TOOLS = [
         "input_schema": {"type": "object", "properties": {}},
     },
     {
+        "name": "read_list",
+        "description": (
+            "Read the main list of repeated items on the current page (search "
+            "results, listings, products, vacancies...) compactly: one line per "
+            "item with its key facts (title, price, attributes, seller/rating) "
+            "and its link. Much faster than read_page_text for comparing many "
+            "items. Returns 25 items per call; call again for the next ones."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "pick_items",
+        "description": (
+            "Choose items from the current page's read_list output by their "
+            "numbers (e.g. the best candidates for the task). The exact item "
+            "details and links are saved for you and included in your final "
+            "answer automatically - don't copy them into notes or the summary. "
+            "Picks accumulate across pages."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "item_numbers": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "The #numbers that start the read_list lines on this page (e.g. 3 for '#3 ...').",
+                },
+            },
+            "required": ["item_numbers"],
+        },
+    },
+    {
         "name": "read_page_text",
         "description": (
             "Read the visible text content of the current page (or, if "
             "element_id is given, of just that element and its children). "
             "Use this to read long text that isn't part of the interactive "
             "element list, such as articles, job/product descriptions, "
-            "profile or resume content, or terms of service. The output may "
-            "be truncated if very long."
+            "profile or resume content, or terms of service. Long text is "
+            "returned in 4000-character chunks; calling it again on the same "
+            "page continues with the next chunk."
         ),
         "input_schema": {
             "type": "object",
@@ -114,6 +147,10 @@ TOOLS = [
                 "element_id": {
                     "type": "integer",
                     "description": "Optional: read only this element's text instead of the whole page.",
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Optional: character offset to start from, to continue reading a truncated text.",
                 },
             },
         },
@@ -166,7 +203,10 @@ TOOLS = [
         "name": "finish_task",
         "description": (
             "Call this when the task is complete (or cannot be completed). "
-            "Provide a summary of what was done and the final result."
+            "Provide a summary of what was done and the final result. If you "
+            "chose items with pick_items, they are appended to the summary "
+            "automatically - then keep the summary to a few sentences (e.g. "
+            "the criteria you used) and don't list the items again."
         ),
         "input_schema": {
             "type": "object",

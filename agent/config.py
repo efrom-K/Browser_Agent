@@ -12,7 +12,15 @@ load_dotenv()
 # order of preference: real Anthropic API > OpenRouter (Anthropic-compatible
 # endpoint, any model) > z.ai (free GLM models). All three speak the
 # Anthropic Messages API, so no code changes are needed to switch.
-if os.environ.get("ANTHROPIC_API_KEY"):
+#
+# LM Studio (local models) takes precedence when LMSTUDIO_MODEL is set: its
+# server exposes the same Anthropic-compatible /v1/messages endpoint.
+LOCAL = bool(os.environ.get("LMSTUDIO_MODEL"))
+if LOCAL:
+    LLM_API_KEY = "lm-studio"  # ignored by LM Studio, but the SDK requires one
+    LLM_BASE_URL = os.environ.get("LMSTUDIO_BASE_URL", "http://localhost:1234")
+    LLM_MODEL = os.environ["LMSTUDIO_MODEL"]
+elif os.environ.get("ANTHROPIC_API_KEY"):
     LLM_API_KEY = os.environ["ANTHROPIC_API_KEY"]
     LLM_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL") or None
     LLM_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
@@ -32,7 +40,9 @@ VISION_ENABLED = os.environ.get("AGENT_VISION", "false").lower() == "true"
 
 # Per-request timeout (seconds) for LLM API calls, so a hung provider
 # request doesn't stall the whole agent loop indefinitely.
-LLM_TIMEOUT = float(os.environ.get("AGENT_LLM_TIMEOUT", "60"))
+# Local inference on a laptop is much slower (prompt processing dominates),
+# so the default is more generous there.
+LLM_TIMEOUT = float(os.environ.get("AGENT_LLM_TIMEOUT", "180" if LOCAL else "60"))
 
 # Safety limits for the autonomous loop (used from Stage 3 onwards).
 MAX_STEPS = int(os.environ.get("AGENT_MAX_STEPS", "50"))
@@ -42,3 +52,7 @@ MAX_STEPS = int(os.environ.get("AGENT_MAX_STEPS", "50"))
 # replaced with a short placeholder to keep the conversation from growing
 # without bound on long tasks.
 CONTEXT_KEEP_LAST = int(os.environ.get("AGENT_CONTEXT_KEEP_LAST", "3"))
+
+# Minimum seconds between page-changing actions (navigate/click/go_back/...)
+# on http(s) pages, to stay under sites' anti-bot rate limits.
+MIN_ACTION_INTERVAL = float(os.environ.get("AGENT_MIN_ACTION_INTERVAL", "2"))
